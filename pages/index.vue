@@ -4,6 +4,7 @@ import { format } from "date-fns";
 // def variables
 const isDeleteModalOpen = ref(false);
 const idTask = ref("");
+const isLoading = ref(false);
 
 // tabs
 const items = [
@@ -18,34 +19,29 @@ const items = [
 ];
 
 // get data today
-const {
-  data: tasks,
-  pending: pendingToday,
-  refresh: refreshToday,
-} = useFetch(() => "/api", {
+const { data: tasks, refresh: refreshToday } = useFetch(() => "/api", {
   key: "tasks",
 });
 
 // get data incoming
-const {
-  data: incomingTasks,
-  pending: pendingIncoming,
-  refresh: refreshIncoming,
-} = useFetch(() => "/api/incoming", {
-  key: "incomingTasks",
-});
+const { data: incomingTasks, refresh: refreshIncoming } = useFetch(
+  () => "/api/incoming",
+  {
+    key: "incomingTasks",
+  }
+);
 
 // do complete or uncomplete
 const handleUpdateTask = async (id: string, value: boolean) => {
-  await useFetch(() => `/api/update/${id}`, {
+  await $fetch(`/api/update/${id}`, {
     method: "PATCH",
     body: {
       isCompleted: !value,
     },
+  }).finally(() => {
+    refreshToday();
+    refreshIncoming();
   });
-
-  refreshToday();
-  refreshIncoming();
 };
 
 // prepare for delete
@@ -56,134 +52,152 @@ const handleDeleteTask = async (id: string) => {
 
 // do delete task
 const doDeleteTask = async () => {
-  await useFetch(() => `/api/delete/${idTask.value}`, { method: "DELETE" });
+  isLoading.value = true;
 
-  // reset variable
-  idTask.value = "";
-  isDeleteModalOpen.value = false;
+  await $fetch(`/api/delete/${idTask.value}`, { method: "DELETE" }).finally(
+    () => {
+      // reset variable
+      isLoading.value = false;
+      idTask.value = "";
+      isDeleteModalOpen.value = false;
 
-  refreshToday();
-  refreshIncoming();
+      refreshToday();
+      refreshIncoming();
+    }
+  );
 };
 </script>
 
 <template>
   <UTabs :items="items">
-    <template #today="{ item, selected }">
-      <div v-if="pendingToday" class="flex flex-col items-center w-full">
-        <p>Please Wait...</p>
+    <template #today="{ item }">
+      <div v-if="tasks?.length === 0" class="flex flex-col items-center w-full">
+        <p>There is no task for today.</p>
       </div>
-      <div v-else>
-        <div
-          v-if="tasks?.length === 0"
-          class="flex flex-col items-center w-full"
+      <div v-for="task in tasks" :key="task.id">
+        <UCard
+          class="mb-2"
+          :ui="{
+            background: `${
+              task.isCompleted ? 'bg-lime-500' : 'bg-white'
+            } 'dark:bg-gray-900'`,
+          }"
         >
-          <p>There is no task for today.</p>
-        </div>
-        <div v-for="task in tasks" :key="task.id">
-          <UCard class="mb-2">
-            <div class="flex justify-between items-center pb-3">
-              <div class="flex-1">
-                <p
-                  class="text-xs font-light leading-6 text-gray-900 dark:text-white"
-                >
-                  {{ format(new Date(task.date), "dd MMM yyy") }}
-                </p>
-              </div>
-              <div>
-                <UButton
-                  size="xs"
-                  type="submit"
-                  :color="`${task.isCompleted ? 'orange' : 'emerald'}`"
-                  class="mx-2"
-                  icon="i-heroicons-check"
-                  :trailing="false"
-                  v-on:click="() => handleUpdateTask(task.id, task.isCompleted)"
-                >
-                  {{ task.isCompleted ? "Uncompleted" : "Completed" }}
-                </UButton>
-                <UButton
-                  size="xs"
-                  type="submit"
-                  color="rose"
-                  icon="i-heroicons-trash"
-                  :trailing="false"
-                  v-on:click="() => handleDeleteTask(task.id)"
-                >
-                  Delete
-                </UButton>
-              </div>
+          <div class="flex justify-between items-center pb-3">
+            <div class="flex-1">
+              <p
+                :class="`text-xs font-light leading-6 ${
+                  task.isCompleted ? 'text-white' : 'text-gray-900'
+                } dark:text-white`"
+              >
+                {{ format(new Date(task.date), "dd MMM yyy") }}
+              </p>
             </div>
-            <p
-              :class="`text-sm leading-6 ${
-                task.isCompleted ? 'line-through' : ''
-              } text-gray-900 dark:text-white`"
-            >
-              {{ task.title }}
-            </p>
-          </UCard>
-        </div>
+            <div>
+              <UButton
+                size="xs"
+                type="submit"
+                :color="`${task.isCompleted ? 'amber' : 'emerald'}`"
+                class="mx-2"
+                icon="i-heroicons-check"
+                :trailing="false"
+                v-on:click="() => handleUpdateTask(task.id, task.isCompleted)"
+              >
+                {{ task.isCompleted ? "Uncompleted" : "Completed" }}
+              </UButton>
+              <UButton
+                size="xs"
+                type="submit"
+                color="rose"
+                icon="i-heroicons-trash"
+                :trailing="false"
+                v-on:click="() => handleDeleteTask(task.id)"
+              >
+                Delete
+              </UButton>
+            </div>
+          </div>
+          <p
+            :class="`text-sm leading-6 ${
+              task.isCompleted ? 'line-through text-white' : 'text-gray-900'
+            } dark:text-white`"
+          >
+            {{ task.title }}
+          </p>
+        </UCard>
       </div>
     </template>
 
     <template #incoming="{ item }">
-      <div v-if="pendingIncoming" class="flex flex-col items-center w-full">
-        <p>Please Wait...</p>
+      <div
+        v-if="incomingTasks?.length === 0"
+        class="flex flex-col items-center w-full"
+      >
+        <p>There is no task.</p>
       </div>
-      <div v-else>
-        <div
-          v-if="incomingTasks?.length === 0"
-          class="flex flex-col items-center w-full"
+      <div v-for="incoming in incomingTasks" :key="incoming.id">
+        <UCard
+          class="mb-2"
+          :ui="{
+            background: `${
+              incoming.isCompleted ? 'bg-lime-500' : 'bg-white'
+            } 'dark:bg-gray-900'`,
+          }"
         >
-          <p>There is no task.</p>
-        </div>
-        <div v-for="incoming in incomingTasks" :key="incoming.id">
-          <UCard class="mb-2">
-            <div class="flex justify-between items-center pb-3">
-              <div class="flex-1">
-                <p
-                  class="text-xs font-light leading-6 text-gray-900 dark:text-white"
-                >
-                  {{ format(new Date(incoming.date), "dd MMM yyy") }}
-                </p>
-              </div>
-              <div>
-                <UButton
-                  size="xs"
-                  type="submit"
-                  :color="`${incoming.isCompleted ? 'orange' : 'emerald'}`"
-                  class="mx-2"
-                  icon="i-heroicons-check"
-                  :trailing="false"
-                  v-on:click="
-                    () => handleUpdateTask(incoming.id, incoming.isCompleted)
-                  "
-                >
-                  {{ incoming.isCompleted ? "Uncompleted" : "Completed" }}
-                </UButton>
-                <UButton
-                  size="xs"
-                  type="submit"
-                  color="rose"
-                  icon="i-heroicons-trash"
-                  :trailing="false"
-                  v-on:click="() => handleDeleteTask(incoming.id)"
-                >
-                  Delete
-                </UButton>
-              </div>
+          <div class="flex justify-between items-center pb-3">
+            <div class="flex-1">
+              <p
+                :class="`text-xs font-light leading-6 ${
+                  incoming.isCompleted ? 'text-white' : 'text-gray-900'
+                } dark:text-white`"
+              >
+                {{ format(new Date(incoming.date), "dd MMM yyy") }}
+              </p>
             </div>
-            <p class="text-sm leading-6 text-gray-900 dark:text-white">
-              {{ incoming.title }}
-            </p>
-          </UCard>
-        </div>
+            <div>
+              <UButton
+                size="xs"
+                type="submit"
+                :color="`${incoming.isCompleted ? 'orange' : 'emerald'}`"
+                class="mx-2"
+                icon="i-heroicons-check"
+                :trailing="false"
+                v-on:click="
+                  () => handleUpdateTask(incoming.id, incoming.isCompleted)
+                "
+              >
+                {{ incoming.isCompleted ? "Uncompleted" : "Completed" }}
+              </UButton>
+              <UButton
+                size="xs"
+                type="submit"
+                color="rose"
+                icon="i-heroicons-trash"
+                :trailing="false"
+                v-on:click="() => handleDeleteTask(incoming.id)"
+              >
+                Delete
+              </UButton>
+            </div>
+          </div>
+          <p
+            :class="`text-sm leading-6 ${
+              incoming.isCompleted ? 'line-through text-white' : 'text-gray-900'
+            } text-gray-900 dark:text-white`"
+          >
+            {{ incoming.title }}
+          </p>
+        </UCard>
       </div>
     </template>
   </UTabs>
 
   <!-- delete modal -->
-  <UModal v-model="isDeleteModalOpen" :ui="{ width: 'w-full sm:max-w-xs' }">
+  <UModal
+    v-model="isDeleteModalOpen"
+    :ui="{ width: 'w-full sm:max-w-xs' }"
+    prevent-close
+  >
     <UCard>
       <template #header>
         <p
@@ -205,6 +219,7 @@ const doDeleteTask = async () => {
             color="primary"
             class="mr-2"
             v-on:click="() => doDeleteTask()"
+            :loading="isLoading"
           >
             Yes, continue!
           </UButton>

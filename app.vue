@@ -3,25 +3,28 @@ import { format } from "date-fns";
 
 // def variables
 const isAddModalOpen = ref(false);
+const isLoading = ref(false);
 const initialTask = { title: "", date: new Date() };
 const taskForm = reactive({ ...initialTask });
 
 const onSubmitTask = async () => {
+  isLoading.value = true;
+
   await $fetch("/api/post", {
     method: "POST",
     body: {
       title: taskForm.title,
       date: taskForm.date,
     },
+  }).finally(async () => {
+    isLoading.value = false;
+    // reset form
+    Object.assign(taskForm, initialTask);
+    // close modal
+    isAddModalOpen.value = false;
+    // refresh
+    await refreshNuxtData();
   });
-
-  // reset form
-  Object.assign(taskForm, initialTask);
-
-  // close modal
-  isAddModalOpen.value = false;
-
-  await refreshNuxtData();
 };
 
 useHead({
@@ -64,7 +67,7 @@ useHead({
           </div>
         </template>
         <UFormGroup label="Title :" name="title" class="mb-3">
-          <UInput v-model="taskForm.title" required placeholder="Title" />
+          <UTextarea v-model="taskForm.title" required placeholder="Title" />
         </UFormGroup>
         <UFormGroup label="Date :" name="date">
           <UPopover :popper="{ placement: 'bottom-start' }">
@@ -82,7 +85,9 @@ useHead({
         </UFormGroup>
 
         <template #footer>
-          <UButton type="submit" color="primary"> Save Task </UButton>
+          <UButton type="submit" color="primary" :loading="isLoading">
+            Save Task
+          </UButton>
         </template>
       </UCard>
     </UModal>
