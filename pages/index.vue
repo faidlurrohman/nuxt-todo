@@ -3,8 +3,10 @@ import { format } from "date-fns";
 
 // def variables
 const isDeleteModalOpen = ref(false);
-const idTask = ref("");
-const isLoading = ref(false);
+const idUpdateTask = ref("");
+const idDeleteTask = ref("");
+const isUpdateLoading = ref(false);
+const isDeleteLoading = ref(false);
 
 // tabs
 const items = [
@@ -33,6 +35,9 @@ const { data: incomingTasks, refresh: refreshIncoming } = useFetch(
 
 // do complete or uncomplete
 const handleUpdateTask = async (id: string, value: boolean) => {
+  isUpdateLoading.value = true;
+  idUpdateTask.value = id;
+
   await $fetch(`/api/update/${id}`, {
     method: "PATCH",
     body: {
@@ -41,30 +46,32 @@ const handleUpdateTask = async (id: string, value: boolean) => {
   }).finally(() => {
     refreshToday();
     refreshIncoming();
+    // reset variable
+    isUpdateLoading.value = false;
+    idUpdateTask.value = "";
   });
 };
 
 // prepare for delete
 const handleDeleteTask = async (id: string) => {
-  idTask.value = id;
+  idDeleteTask.value = id;
   isDeleteModalOpen.value = true;
 };
 
 // do delete task
 const doDeleteTask = async () => {
-  isLoading.value = true;
+  isDeleteLoading.value = true;
 
-  await $fetch(`/api/delete/${idTask.value}`, { method: "DELETE" }).finally(
-    () => {
-      // reset variable
-      isLoading.value = false;
-      idTask.value = "";
-      isDeleteModalOpen.value = false;
-
-      refreshToday();
-      refreshIncoming();
-    }
-  );
+  await $fetch(`/api/delete/${idDeleteTask.value}`, {
+    method: "DELETE",
+  }).finally(() => {
+    refreshToday();
+    refreshIncoming();
+    // reset variable
+    isDeleteLoading.value = false;
+    idDeleteTask.value = "";
+    isDeleteModalOpen.value = false;
+  });
 };
 </script>
 
@@ -99,8 +106,11 @@ const doDeleteTask = async () => {
                 type="submit"
                 :color="`${task.isCompleted ? 'amber' : 'emerald'}`"
                 class="mx-2"
-                icon="i-heroicons-check"
+                :icon="`${
+                  task.isCompleted ? 'i-heroicons-x-mark' : 'i-heroicons-check'
+                }`"
                 :trailing="false"
+                :loading="isUpdateLoading && task.id === idUpdateTask"
                 v-on:click="() => handleUpdateTask(task.id, task.isCompleted)"
               >
                 {{ task.isCompleted ? "Uncompleted" : "Completed" }}
@@ -160,8 +170,13 @@ const doDeleteTask = async () => {
                 type="submit"
                 :color="`${incoming.isCompleted ? 'orange' : 'emerald'}`"
                 class="mx-2"
-                icon="i-heroicons-check"
+                :icon="`${
+                  incoming.isCompleted
+                    ? 'i-heroicons-x-mark'
+                    : 'i-heroicons-check'
+                }`"
                 :trailing="false"
+                :loading="isUpdateLoading && incoming.id === idUpdateTask"
                 v-on:click="
                   () => handleUpdateTask(incoming.id, incoming.isCompleted)
                 "
@@ -219,7 +234,7 @@ const doDeleteTask = async () => {
             color="primary"
             class="mr-2"
             v-on:click="() => doDeleteTask()"
-            :loading="isLoading"
+            :loading="isDeleteLoading"
           >
             Yes, continue!
           </UButton>
